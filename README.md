@@ -1,0 +1,2 @@
+# litpaxos
+paxos, multi-paxos
