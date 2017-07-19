@@ -33,8 +33,25 @@ public class Learner extends Base {
             isLearned = false;
         }
 
+        /**
+         * Learn a Value
+         * @param learnedValue
+         */
+        public void LearnValue(String learnedValue) {
+            this.learnedValue = learnedValue;
+            this.isLearned = true;
+        }
+
         public String getLearnedValue() {
             return learnedValue;
+        }
+
+        public boolean isLearned() {
+            return isLearned;
+        }
+
+        public void setLearned(boolean learned) {
+            isLearned = learned;
         }
     }
 

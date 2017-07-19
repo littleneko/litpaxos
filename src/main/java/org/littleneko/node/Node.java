@@ -1,6 +1,12 @@
 package org.littleneko.node;
 
-import org.littleneko.comm.*;
+import org.littleneko.comm.MsgReceiver;
+import org.littleneko.comm.MsgReceiverImplByTCP;
+import org.littleneko.comm.MsgTransport;
+import org.littleneko.comm.MsgTransportImplByTCP;
+import org.littleneko.message.BasePaxosMsg;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -12,8 +18,11 @@ import java.util.stream.IntStream;
  * Created by little on 2017-06-14.
  */
 public class Node {
+    protected static final Logger logger = LoggerFactory.getLogger(Node.class);
+
     private int nodeId;
 
+    // group
     private Map<Integer, Group> groupMap;
 
     private MsgTransport msgTransport;
@@ -39,6 +48,13 @@ public class Node {
     }
 
     public void commit(int groupId, String value) {
+        Group group = groupMap.get(groupId);
+    }
 
+    public void onReciveMessage(BasePaxosMsg paxosMsg) {
+        int groupID = paxosMsg.getGroupID();
+        if (groupMap.containsKey(groupID)) {
+            groupMap.get(groupID).getInstance().recvPaxosMsg(paxosMsg);
+        }
     }
 }

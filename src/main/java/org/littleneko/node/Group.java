@@ -14,9 +14,14 @@ public class Group {
     public Group(int groupId, MsgTransport msgTransport, NodeInfo curNode, int allNodeCount) {
         this.groupId = groupId;
         instance = new Instance(msgTransport, curNode, groupId, allNodeCount);
+        instance.startInstance();
     }
 
     public int getGroupId() {
         return groupId;
+    }
+
+    public Instance getInstance() {
+        return instance;
     }
 }

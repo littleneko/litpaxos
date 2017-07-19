@@ -38,15 +38,14 @@ public class Instance {
     // 保存每个instance的value
     private Map<Integer, String> instanceValues;
 
-    private PaxosLog paxosLog;
-    private PaxosTimer timer;
-
     // 存储接受的paxos消息
     private BlockingQueue<BasePaxosMsg> paxosMsgs;
 
+    private PaxosLog paxosLog;
+
     public Instance(MsgTransport msgTransport, NodeInfo nodeInfo, int allNodeCount, int groupID) {
         paxosLog = new PaxosLog(groupID);
-        timer = new PaxosTimer();
+        PaxosTimer timer = new PaxosTimer();
         proposer = new Proposer(msgTransport, nodeInfo, this, timer, allNodeCount);
         acceptor = new Acceptor(msgTransport, this, nodeInfo, paxosLog);
         learner = new Learner(msgTransport, this, nodeInfo, allNodeCount, 500, timer);
