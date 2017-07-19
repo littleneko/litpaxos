@@ -27,7 +27,9 @@ public class Acceptor extends Base {
         private String acceptedBallotValue;
 
         public AccepterInfo() {
-            reset();
+            promiseBallotNumber = new BallotNumber(0, 0);
+            acceptedBallotNumber = new BallotNumber(0, 0);
+            acceptedBallotValue = null;
         }
 
         /**
@@ -46,11 +48,10 @@ public class Acceptor extends Base {
         }
 
         /**
-         *
+         * reset the acceptedBallotNumber
          */
         public void reset() {
-            promiseBallotNumber = new BallotNumber(0, 0);
-            acceptedBallotNumber = new BallotNumber(0, 0);
+            acceptedBallotNumber.reset();
             acceptedBallotValue = null;
         }
 
@@ -143,7 +144,7 @@ public class Acceptor extends Base {
         acceptReplayMsg.setNodeID(getCurNodeInfo().getNodeID());
         acceptReplayMsg.setProposalID(paxosMsg.getProposalID());
 
-        BallotNumber ballotNumber = new BallotNumber(paxosMsg.getProposalID(),paxosMsg.getNodeID());
+        BallotNumber ballotNumber = new BallotNumber(paxosMsg.getProposalID(), paxosMsg.getNodeID());
 
         // b >= pb
         if (ballotNumber.compareTo(accepterInfo.getPromiseBallotNumber()) >= 0) {
