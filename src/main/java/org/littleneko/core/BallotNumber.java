@@ -38,19 +38,16 @@ public class BallotNumber {
         return this.compareTo(ballotNumber) == 0;
     }
 
+    public void reset() {
+        proposalID = 0;
+        proposalNodeID = 0;
+    }
+
     public int getProposalID() {
         return proposalID;
     }
 
-    public void setProposalID(int proposalID) {
-        this.proposalID = proposalID;
-    }
-
     public int getProposalNodeID() {
         return proposalNodeID;
-    }
-
-    public void setProposalNodeID(int proposalNodeID) {
-        this.proposalNodeID = proposalNodeID;
     }
 }
