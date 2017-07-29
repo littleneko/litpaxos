@@ -41,20 +41,25 @@ public class Instance {
     // 存储接受的paxos消息
     private BlockingQueue<BasePaxosMsg> paxosMsgs;
 
+    // 保存客户端需要提交的Value
+    private Committer committer;
+
     private PaxosLog paxosLog;
 
-    public Instance(MsgTransport msgTransport, NodeInfo nodeInfo, int allNodeCount, int groupID) {
-        paxosLog = new PaxosLog(groupID);
+    public Instance(MsgTransport msgTransport, NodeInfo nodeInfo, Committer committer, Map<Integer, StateMachine> stateMachineMap, int allNodeCount, int groupID) {
+        this.paxosLog = new PaxosLog(groupID);
         PaxosTimer timer = new PaxosTimer();
-        proposer = new Proposer(msgTransport, nodeInfo, this, timer, allNodeCount);
-        acceptor = new Acceptor(msgTransport, this, nodeInfo, paxosLog);
-        learner = new Learner(msgTransport, this, nodeInfo, allNodeCount, 500, timer);
+        this.proposer = new Proposer(msgTransport, nodeInfo, this, timer, allNodeCount);
+        this.acceptor = new Acceptor(msgTransport, this, nodeInfo, paxosLog);
+        this.learner = new Learner(msgTransport, this, nodeInfo, allNodeCount, 500, timer);
 
-        instanceId = 0;
-        stateMachineMap = new HashMap<>();
-        instanceValues = new HashMap<>();
+        this.committer = committer;
 
-        paxosMsgs = new LinkedBlockingQueue<>();
+        this.instanceId = 0;
+        this.stateMachineMap = stateMachineMap;
+        this.instanceValues = new HashMap<>();
+
+        this.paxosMsgs = new LinkedBlockingQueue<>();
     }
 
     /**
@@ -81,6 +86,13 @@ public class Instance {
                 }
             }
         }).start();
+
+        new Thread(() -> {
+            while (true) {
+                String value = committer.GetCommitValue();
+                proposer.newBallot(value);
+            }
+        }).start();
     }
 
     /**
@@ -104,14 +116,6 @@ public class Instance {
         persist();
     }
 
-    /**
-     * 添加一个sm
-     *
-     * @param stateMachine
-     */
-    public void addSM(StateMachine stateMachine) {
-        stateMachineMap.put(stateMachine.getSMID(), stateMachine);
-    }
 
     /**
      * 接受paxos消息，实际上是把消息加入队列

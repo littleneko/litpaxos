@@ -165,7 +165,7 @@ public class Acceptor extends Base {
             acceptReplayMsg.setRejectByProposalID(accepterInfo.getPromiseBallotNumber().getProposalID());
         }
 
-        sendMsg(paxosMsg.getNodeID(), acceptReplayMsg.getMsgJson(), PaxosMsgTypeEnum.PAXOS_PREPARE_REPLAY);
+        sendMsg(paxosMsg.getNodeID(), acceptReplayMsg.getMsgJson(), PaxosMsgTypeEnum.PAXOS_ACCEPT_REPLAY);
     }
 
     /**

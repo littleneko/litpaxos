@@ -57,6 +57,7 @@ public class TCPServer {
      * start Server
      */
     public void startCommServer() {
+        init();
         doBind();
     }
 

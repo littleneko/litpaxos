@@ -191,7 +191,7 @@ public class TCPClient {
 
                 logger.info("Connect to server successfully!");
             } else {
-                logger.info("Failed to connect to server, try connect after 10s");
+                logger.info("Failed to connect to server {} {}:{}, try connect after 10s", nodeInfo.getNodeID(), nodeInfo.getNodeIP(), nodeInfo.getNodePort());
                 futureListener.channel().eventLoop().schedule(() -> doConnect(nodeInfo), CONNECT_RETRY_DELAY, TimeUnit.SECONDS);
             }
         });

@@ -1,7 +1,11 @@
 package org.littleneko.node;
 
 import org.littleneko.comm.MsgTransport;
+import org.littleneko.core.Committer;
 import org.littleneko.core.Instance;
+import org.littleneko.sm.StateMachine;
+
+import java.util.Map;
 
 /**
  * Created by little on 2017-06-14.
@@ -10,10 +14,12 @@ public class Group {
     private int groupId;
 
     private Instance instance;
+    private Committer committer;
 
-    public Group(int groupId, MsgTransport msgTransport, NodeInfo curNode, int allNodeCount) {
+    public Group(int groupId, MsgTransport msgTransport, NodeInfo curNode, int allNodeCount, Map<Integer, StateMachine> sm) {
+        this.committer = new Committer();
         this.groupId = groupId;
-        instance = new Instance(msgTransport, curNode, groupId, allNodeCount);
+        this.instance = new Instance(msgTransport, curNode, committer, sm, groupId, allNodeCount);
         instance.startInstance();
     }
 
@@ -23,5 +29,9 @@ public class Group {
 
     public Instance getInstance() {
         return instance;
+    }
+
+    public Committer getCommitter() {
+        return committer;
     }
 }

@@ -1,0 +1,27 @@
+{
+  "paxosConf": {
+    "nodes": {
+      "1": {
+        "id": 1,
+        "ip": "127.0.0.1",
+        "port": 1111
+      },
+      "2": {
+        "id": 2,
+        "ip": "127.0.0.1",
+        "port": 1112
+      },
+      "3": {
+        "id": 3,
+        "ip": "127.0.0.1",
+        "port": 1113
+      }
+    },
+    "myID": 1,
+    "commTimeOut": 5,
+    "learnInterval": 3,
+    "logFile": "./server1.log"
+  },
+  "requestIP": "127.0.0.1",
+  "requestPort": 1201
+}

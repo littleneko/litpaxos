@@ -1,13 +1,15 @@
 package org.littleneko.node;
 
-import org.littleneko.comm.MsgReceiver;
-import org.littleneko.comm.MsgReceiverImplByTCP;
-import org.littleneko.comm.MsgTransport;
-import org.littleneko.comm.MsgTransportImplByTCP;
+import org.littleneko.comm.*;
 import org.littleneko.message.BasePaxosMsg;
+import org.littleneko.message.PaxosMsgTypeEnum;
+import org.littleneko.message.PaxosMsgUtil;
+import org.littleneko.message.TransMsg;
+import org.littleneko.sm.StateMachine;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.UnsupportedEncodingException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -20,41 +22,68 @@ import java.util.stream.IntStream;
 public class Node {
     protected static final Logger logger = LoggerFactory.getLogger(Node.class);
 
-    private int nodeId;
+    private class MsgRecvListenerImpl implements MsgRecvListener {
+        @Override
+        public void onMsgRecv(PaxosMsgTypeEnum paxosMsgTypeEnum, TransMsg transMsg) {
+            try {
+                String str = new String(transMsg.getPaxosMsg(), "UTF-8");
+                BasePaxosMsg paxosMsg = PaxosMsgUtil.getPaxosMsg(paxosMsgTypeEnum, str);
+                onReciveMessage(paxosMsg);
+            } catch (UnsupportedEncodingException e) {
+                //e.printStackTrace();
+                logger.error(e.getMessage());
+            }
+        }
+    }
 
+    private int nodeId;
     // group
     private Map<Integer, Group> groupMap;
 
     private MsgTransport msgTransport;
-
     private MsgReceiver msgReceiver;
 
     private List<NodeInfo> nodeInfos;
 
-    public void init(int myNodeID, Map<Integer, NodeInfo> allNode, int groupCount) {
-        this.nodeId = myNodeID;
+    public void init(PaxosConf conf, Map<Integer, Map<Integer, StateMachine>> sm, int groupCount) {
+        this.nodeId = conf.getMyNodeID();
         this.nodeInfos = new ArrayList<>();
-        allNode.values().forEach((v) -> nodeInfos.add(v));
+        conf.getNodes().values().forEach((v) -> nodeInfos.add(v));
 
         int allNodeCount = nodeInfos.size();
-        NodeInfo myNodeInfo = allNode.get(myNodeID);
+        NodeInfo myNodeInfo = conf.getNodes().get(this.nodeId);
 
         msgTransport = new MsgTransportImplByTCP(nodeInfos);
 
         this.groupMap = new HashMap<>(groupCount);
-        IntStream.range(1, groupCount).forEach((i) -> groupMap.put(i, new Group(i, msgTransport, myNodeInfo, allNodeCount)));
+        IntStream.range(0, groupCount).forEach((i) -> groupMap.put(i, new Group(i, msgTransport, myNodeInfo, allNodeCount, sm.get(i))));
 
         msgReceiver = new MsgReceiverImplByTCP(myNodeInfo.getNodeIP(), myNodeInfo.getNodePort());
+        msgReceiver.addMsgReceiverListener(new MsgRecvListenerImpl());
+        msgReceiver.startServer();
     }
 
+    /**
+     * Client 提交一个值
+     *
+     * @param groupId
+     * @param value
+     */
     public void commit(int groupId, String value) {
         Group group = groupMap.get(groupId);
+        group.getCommitter().newCommitValue(value);
     }
 
-    public void onReciveMessage(BasePaxosMsg paxosMsg) {
+    /**
+     * 把消息交给对应的Group
+     * @param paxosMsg
+     */
+    private void onReciveMessage(BasePaxosMsg paxosMsg) {
         int groupID = paxosMsg.getGroupID();
         if (groupMap.containsKey(groupID)) {
             groupMap.get(groupID).getInstance().recvPaxosMsg(paxosMsg);
+        } else {
+            logger.warn("Mismatch groupID {}", groupID);
         }
     }
 }

@@ -25,17 +25,21 @@ public class BallotNumber {
      * @return
      */
     public int compareTo(BallotNumber ballotNumber) {
-        return this.proposalID - ballotNumber.getProposalID();
+        if (this.proposalID != ballotNumber.proposalID) {
+            return this.proposalID - ballotNumber.proposalID;
+        } else {
+            return this.proposalNodeID = ballotNumber.proposalNodeID;
+        }
     }
 
     /**
-     * 只判断proposalID是否相等
+     * proposalID和proposalNodeID 两个作为唯一提案编号
      *
      * @param ballotNumber
      * @return
      */
     public boolean equals(BallotNumber ballotNumber) {
-        return this.compareTo(ballotNumber) == 0;
+        return this.proposalID == ballotNumber.proposalID && this.proposalNodeID == ballotNumber.proposalNodeID;
     }
 
     public void reset() {
