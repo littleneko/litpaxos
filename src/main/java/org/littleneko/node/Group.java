@@ -19,7 +19,7 @@ public class Group {
     public Group(int groupId, MsgTransport msgTransport, NodeInfo curNode, int allNodeCount, Map<Integer, StateMachine> sm) {
         this.committer = new Committer();
         this.groupId = groupId;
-        this.instance = new Instance(msgTransport, curNode, committer, sm, groupId, allNodeCount);
+        this.instance = new Instance(msgTransport, curNode, committer, sm, allNodeCount, groupId);
         instance.startInstance();
     }
 

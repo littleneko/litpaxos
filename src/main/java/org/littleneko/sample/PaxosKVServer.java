@@ -67,6 +67,11 @@ public class PaxosKVServer {
 
         ByteBuffer buff = ByteBuffer.allocate(1024);
         int buffRead = sc.read(buff);
+        if (buffRead == -1) {
+            System.out.printf("Close");
+            sc.close();
+            return;
+        }
         while (buffRead > 0) {
             buff.flip();
             String receiveText = new String(buff.array(), 0, buffRead);
@@ -76,17 +81,17 @@ public class PaxosKVServer {
         }
 
         String recvJson = sb.toString();
-        System.out.printf(recvJson);
+        System.out.printf("Read data: %s\n", recvJson);
         this.node.commit(0, recvJson);
 
-        sc.register(selector, SelectionKey.OP_READ);
+        //sc.register(selector, SelectionKey.OP_READ);
     }
 
     public static void main(String[] args) {
         PaxosKVServer server = new PaxosKVServer();
 
         // Read configure file
-        String confFile = System.getProperty("user.dir") + "/sample_conf/" + "server1.json";
+        String confFile = System.getProperty("user.dir") + "/sample_conf/" + "server3.json";
         Gson gson = new Gson();
         ServerConf serverConf = gson.fromJson(FileUtils.readFromFile(confFile), ServerConf.class);
 

@@ -268,7 +268,7 @@ public class Proposer extends Base {
         // 添加accept超时定时器
         timer.addTimer(Instance.ACCEPT_TIMER_ID, (id) -> accept(), ACCEPT_TIMEOUT, TimeUnit.SECONDS);
 
-        logger.info("Send prepare msg, instance: {}, nodeID: {}, proposalID: {}, proposal value: {}", acceptMsg.getInstanceID(), acceptMsg.getNodeID(), acceptMsg.getProposalID(), acceptMsg.getProposalDec());
+        logger.info("Send accept msg, instance: {}, nodeID: {}, proposalID: {}, proposal value: {}", acceptMsg.getInstanceID(), acceptMsg.getNodeID(), acceptMsg.getProposalID(), acceptMsg.getProposalDec());
         // 广播accept消息
         broadcastMessage(acceptMsg.getMsgJson(), PaxosMsgTypeEnum.PAXOS_ACCEPT);
     }

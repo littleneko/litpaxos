@@ -54,4 +54,12 @@ public class BallotNumber {
     public int getProposalNodeID() {
         return proposalNodeID;
     }
+
+    @Override
+    public String toString() {
+        return "BallotNumber{" +
+                "proposalID=" + proposalID +
+                ", proposalNodeID=" + proposalNodeID +
+                '}';
+    }
 }
