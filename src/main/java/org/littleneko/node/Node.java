@@ -45,18 +45,18 @@ public class Node {
 
     private List<NodeInfo> nodeInfos;
 
-    public void init(PaxosConf conf, Map<Integer, Map<Integer, StateMachine>> sm, int groupCount) {
-        this.nodeId = conf.getMyNodeID();
+    public void runNode(Options options) {
+        this.nodeId = options.getMyNodeID();
         this.nodeInfos = new ArrayList<>();
-        conf.getNodes().values().forEach((v) -> nodeInfos.add(v));
+        options.getNodes().values().forEach((v) -> nodeInfos.add(v));
 
         int allNodeCount = nodeInfos.size();
-        NodeInfo myNodeInfo = conf.getNodes().get(this.nodeId);
+        NodeInfo myNodeInfo = options.getNodes().get(this.nodeId);
 
         msgTransport = new MsgTransportImplByTCP(nodeInfos);
 
-        this.groupMap = new HashMap<>(groupCount);
-        IntStream.range(0, groupCount).forEach((i) -> groupMap.put(i, new Group(i, msgTransport, myNodeInfo, allNodeCount, sm.get(i))));
+        this.groupMap = new HashMap<>(options.getGroupCount());
+        IntStream.range(0, options.getGroupCount()).forEach((i) -> groupMap.put(i, new Group(i, msgTransport, myNodeInfo, allNodeCount, options.getGroupSMInfo(i))));
 
         msgReceiver = new MsgReceiverImplByTCP(myNodeInfo.getNodeIP(), myNodeInfo.getNodePort());
         msgReceiver.addMsgReceiverListener(new MsgRecvListenerImpl());

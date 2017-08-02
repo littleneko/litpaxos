@@ -4,6 +4,7 @@ import org.littleneko.comm.MsgTransport;
 import org.littleneko.logstorage.InstanceState;
 import org.littleneko.logstorage.PaxosLog;
 import org.littleneko.message.*;
+import org.littleneko.node.GroupSMInfo;
 import org.littleneko.node.NodeInfo;
 import org.littleneko.sm.StateMachine;
 import org.littleneko.utils.PaxosTimer;
@@ -11,6 +12,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -33,7 +35,7 @@ public class Instance {
     private volatile int instanceId;
 
     // 一个instance可以有多个SM
-    private Map<Integer, StateMachine> stateMachineMap;
+    private List<StateMachine> stateMachines;
 
     // 保存每个instance的value
     private Map<Integer, String> instanceValues;
@@ -46,7 +48,7 @@ public class Instance {
 
     private PaxosLog paxosLog;
 
-    public Instance(MsgTransport msgTransport, NodeInfo nodeInfo, Committer committer, Map<Integer, StateMachine> stateMachineMap, int allNodeCount, int groupID) {
+    public Instance(MsgTransport msgTransport, NodeInfo nodeInfo, Committer committer, GroupSMInfo groupSMInfo, int allNodeCount, int groupID) {
         this.paxosLog = new PaxosLog(groupID);
         PaxosTimer timer = new PaxosTimer();
         this.proposer = new Proposer(msgTransport, nodeInfo, this, timer, allNodeCount);
@@ -56,7 +58,7 @@ public class Instance {
         this.committer = committer;
 
         this.instanceId = 0;
-        this.stateMachineMap = stateMachineMap;
+        this.stateMachines = groupSMInfo.getSmList();
         this.instanceValues = new HashMap<>();
 
         this.paxosMsgs = new LinkedBlockingQueue<>();
@@ -190,7 +192,7 @@ public class Instance {
         return instanceValues;
     }
 
-    public Map<Integer, StateMachine> getStateMachineMap() {
-        return stateMachineMap;
+    public List<StateMachine> getStateMachines() {
+        return stateMachines;
     }
 }

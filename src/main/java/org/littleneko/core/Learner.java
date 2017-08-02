@@ -146,7 +146,7 @@ public class Learner extends Base {
         learnResponseMsg.getValues().forEach((k, v) -> {
             if (k >= getInstance().getInstanceId()) {
                 getInstance().saveValue(v);
-                getInstance().getStateMachineMap().forEach((smk, smv) -> smv.execute(v));
+                getInstance().getStateMachines().forEach((smv) -> smv.execute(v));
                 // 学习instance并提高当前instance ID
                 getInstance().newInstance();
             }
@@ -174,7 +174,7 @@ public class Learner extends Base {
                     // instance 保存该值并持久化
                     getInstance().saveValue(k);
                     // 执行sm
-                    getInstance().getStateMachineMap().forEach((smk, smv) -> smv.execute(k));
+                    getInstance().getStateMachines().forEach((smv) -> smv.execute(k));
                     // 更新当前instance + 1
                     getInstance().newInstance();
                 }

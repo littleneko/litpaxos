@@ -16,13 +16,15 @@ public class KVStateMachine extends StateMachine {
         switch (kvMessage.getTypeEnum()) {
             case PUT:
                 kv.put(kvMessage.getKey(), kvMessage.getValue());
+                System.out.println("Put: " + kvMessage.getKey() + "-> " + kvMessage.getValue());
                 break;
             case DEL:
                 kv.remove(kvMessage.getKey());
+                System.out.println("Del: " + kvMessage.getKey() + "-> " + kvMessage.getValue());
                 break;
             case GET:
                 String v = kv.get(kvMessage.getKey());
-                System.out.printf(v);
+                System.out.println("Get: " + kvMessage.getKey() + "-> " + v);
                 break;
         }
     }

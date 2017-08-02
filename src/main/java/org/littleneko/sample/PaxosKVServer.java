@@ -1,8 +1,9 @@
 package org.littleneko.sample;
 
 import com.google.gson.Gson;
+import org.littleneko.node.GroupSMInfo;
 import org.littleneko.node.Node;
-import org.littleneko.sm.StateMachine;
+import org.littleneko.node.Options;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
@@ -11,9 +12,7 @@ import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
-import java.util.HashMap;
 import java.util.Iterator;
-import java.util.Map;
 
 public class PaxosKVServer {
     private Selector selector;
@@ -91,25 +90,29 @@ public class PaxosKVServer {
         PaxosKVServer server = new PaxosKVServer();
 
         // Read configure file
-        String confFile = System.getProperty("user.dir") + "/sample_conf/" + "server3.json";
+        String confFile = System.getProperty("user.dir") + "/sample_conf/" + "server2.json";
         Gson gson = new Gson();
         ServerConf serverConf = gson.fromJson(FileUtils.readFromFile(confFile), ServerConf.class);
 
-        // Init State Machine
-        Map<Integer, Map<Integer, StateMachine>> sms = new HashMap<>();
-        Map<Integer, StateMachine> sm = new HashMap<>();
-        sm.put(1, new KVStateMachine());
-        sms.put(1, sm);
+        Options options = new Options(1);
+        options.setPaxosConf(serverConf.getPaxosConf());
+        options.setNodes(serverConf.getNodes());
+        options.setMyNodeID(serverConf.getMyNodeID());
+
+        GroupSMInfo groupSMInfo = new GroupSMInfo(0);
+        groupSMInfo.addSM(new KVStateMachine());
+
+        options.addGroupSMInfo(groupSMInfo);
 
         // Init Node
-        server.node.init(serverConf.getPaxosConf(), sms, 1);
+        server.node.runNode(options);
 
         // Init Server, start accept client request
         try {
             server.initServe(serverConf.getRequestIP(), serverConf.getRequestPort());
             server.startServer();
         } catch (IOException e) {
-            e.printStackTrace();
+            //e.printStackTrace();
         }
 
     }
