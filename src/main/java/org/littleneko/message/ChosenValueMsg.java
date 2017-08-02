@@ -32,7 +32,8 @@ public class ChosenValueMsg extends BasePaxosMsg {
 
     @Override
     public String toString() {
-        return "ChosenValueMsg{" +
+        return super.toString() +
+                "ChosenValueMsg{" +
                 "acceptedProposalID=" + acceptedProposalID +
                 ", value='" + value + '\'' +
                 '}';

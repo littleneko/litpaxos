@@ -109,7 +109,7 @@ public class Acceptor extends Base {
 
         // b >= pb，新提案编号 >= 当前已接受的提案编号，接受此提案
         if (ballotNumber.compareTo(accepterInfo.getPromiseBallotNumber()) >= 0) {
-            logger.info("b >= pb, promise. b = {}, pb = {}, ab = {}, av = {}", paxosMsg.getProposalID(), accepterInfo.getPromiseBallotNumber(),
+            logger.info("Recv prepare msg, b >= pb, promise. b = {}, pb = {}, ab = {}, av = {}", paxosMsg.getProposalID(), accepterInfo.getPromiseBallotNumber(),
                     accepterInfo.getAcceptedBallotNumber().getProposalID(), accepterInfo.getAcceptedBallotValue());
             prepareReplayMsg.setOk(true);
             // set ab, av
@@ -124,7 +124,7 @@ public class Acceptor extends Base {
 
             accepterInfo.persist();
         } else {
-            logger.info("b < pb, reject. rejected by proposal ID: {}", accepterInfo.getPromiseBallotNumber().getProposalID());
+            logger.info("Recv prepare msg, b < pb, reject. rejected by proposal ID: {}", accepterInfo.getPromiseBallotNumber().getProposalID());
             prepareReplayMsg.setOk(false);
             prepareReplayMsg.setRejectByProposalID(accepterInfo.getPromiseBallotNumber().getProposalID());
         }
@@ -148,7 +148,7 @@ public class Acceptor extends Base {
 
         // b >= pb
         if (ballotNumber.compareTo(accepterInfo.getPromiseBallotNumber()) >= 0) {
-            logger.info("b >= pb, accept. b = {}, pb = {}", paxosMsg.getProposalID(), accepterInfo.getPromiseBallotNumber().getProposalID());
+            logger.info("Recv accept msg, b >= pb, accept. b = {}, pb = {}", paxosMsg.getProposalID(), accepterInfo.getPromiseBallotNumber().getProposalID());
             acceptReplayMsg.setOk(true);
             // pb = b, ab = b, av = v
             accepterInfo.setPromiseBallotNumber(ballotNumber);
@@ -160,7 +160,7 @@ public class Acceptor extends Base {
             //发送当前accepter的消息给所有learner
             sendChosenValue();
         } else {
-            logger.info("b < pb, reject. rejected by proposal ID: {}", accepterInfo.getPromiseBallotNumber().getProposalID());
+            logger.info("Recv accept msg, b < pb, reject. rejected by proposal ID: {}", accepterInfo.getPromiseBallotNumber().getProposalID());
             acceptReplayMsg.setOk(false);
             acceptReplayMsg.setRejectByProposalID(accepterInfo.getPromiseBallotNumber().getProposalID());
         }

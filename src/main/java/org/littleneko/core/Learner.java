@@ -10,7 +10,9 @@ import org.littleneko.utils.PaxosTimer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
@@ -35,6 +37,7 @@ public class Learner extends Base {
 
         /**
          * Learn a Value
+         *
          * @param learnedValue
          */
         public void LearnValue(String learnedValue) {
@@ -162,11 +165,12 @@ public class Learner extends Base {
         logger.info("Recv chosen value: {}", chosenValueMsg);
         if (chosenValueMsg.getInstanceID() == getInstance().getInstanceId()) {
             if (acceptedValues.containsKey(chosenValueMsg.getValue())) {
-                acceptedValues.put(chosenValueMsg.getValue(), acceptedValues.get(chosenValueMsg.getValue() + 1));
+                acceptedValues.put(chosenValueMsg.getValue(), acceptedValues.get(chosenValueMsg.getValue()) + 1);
             } else {
                 acceptedValues.put(chosenValueMsg.getValue(), 1);
             }
 
+            List<String> delKey = new ArrayList<>();
             acceptedValues.forEach((k, v) -> {
                 // 被超过一半的acceptor接受
                 if (v > allNodeCount / 2 + 1) {
@@ -177,10 +181,14 @@ public class Learner extends Base {
                     getInstance().getStateMachines().forEach((smv) -> smv.execute(k));
                     // 更新当前instance + 1
                     getInstance().newInstance();
+
+                    delKey.add(k);
                 }
             });
 
-            acceptedValues.clear();
+            for (String key: delKey) {
+                acceptedValues.remove(key);
+            }
         }
     }
 }

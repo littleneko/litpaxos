@@ -1,119 +1,80 @@
 package org.littleneko.sample;
 
+import com.github.luohaha.connection.Conn;
+import com.github.luohaha.param.ServerParam;
+import com.github.luohaha.server.LightCommServer;
 import com.google.gson.Gson;
 import org.littleneko.node.GroupSMInfo;
 import org.littleneko.node.Node;
 import org.littleneko.node.Options;
 
 import java.io.IOException;
-import java.net.InetSocketAddress;
-import java.nio.ByteBuffer;
-import java.nio.channels.SelectionKey;
-import java.nio.channels.Selector;
-import java.nio.channels.ServerSocketChannel;
-import java.nio.channels.SocketChannel;
-import java.util.Iterator;
+import java.util.HashSet;
+import java.util.Set;
 
 public class PaxosKVServer {
-    private Selector selector;
     private Node node = new Node();
+    private String confFile;
+    private ServerConf serverConf;
 
-    public void initServe(String ip, int port) throws IOException {
-        selector = Selector.open();
-        ServerSocketChannel ssc = ServerSocketChannel.open();
-        ssc.socket().bind(new InetSocketAddress(ip, port));
-        ssc.configureBlocking(false);
-        ssc.register(selector, SelectionKey.OP_ACCEPT);
+    private Set<Conn> conns = new HashSet<>();
+    private LightCommServer commServer;
+
+    public PaxosKVServer(String confFile) {
+        this.confFile = confFile;
     }
 
-    public void startServer() {
-        try {
-            while (true) {
-                int readyChannels = selector.select();
-                if (readyChannels == 0)
-                    continue;
-                Iterator<SelectionKey> iterator = selector.selectedKeys().iterator();
-                while (iterator.hasNext()) {
-                    SelectionKey key = iterator.next();
-                    if (key.isAcceptable()) {
-                        handleAccept(key);
-                    }
-                    if (key.isReadable()) {
-                        handleRead(key);
-                    }
-                    iterator.remove();
-                }
+    /**
+     *
+     */
+    public void init() {
+        Gson gson = new Gson();
+        serverConf = gson.fromJson(FileUtils.readFromFile(confFile), ServerConf.class);
 
-            }
+        ServerParam param = new ServerParam(serverConf.getRequestIP(), serverConf.getRequestPort());
+        param.setBacklog(128);
+        param.setOnAccept(conn -> conns.add(conn));
+        param.setOnRead((conn, msg) -> node.commit(0, new String(msg)));
+        param.setOnClose(conn -> conns.remove(conn));
+        param.setOnReadError((conn, err) -> System.out.println(err.getMessage()));
+        param.setOnWriteError((conn, err) -> System.out.println(err.getMessage()));
+        param.setOnAcceptError(err -> System.out.println(err.getMessage()));
+
+        commServer = new LightCommServer(param, 4);
+    }
+
+    /**
+     * start kv server
+     */
+    public void startServer() {
+        // start comm server to recv client request
+        try {
+            commServer.start();
         } catch (IOException e) {
+            // TODO Auto-generated catch block
             e.printStackTrace();
         }
-    }
 
-    private void handleAccept(SelectionKey key) throws IOException {
-        System.out.println("Accept");
-        ServerSocketChannel ssc = (ServerSocketChannel) key.channel();
-        SocketChannel client = ssc.accept();
-        client.configureBlocking(false);
-        client.register(key.selector(), SelectionKey.OP_READ);
-    }
-
-    private void handleRead(SelectionKey key) throws IOException {
-        System.out.println("Read");
-        SocketChannel sc = (SocketChannel) key.channel();
-
-        StringBuilder sb = new StringBuilder();
-
-        ByteBuffer buff = ByteBuffer.allocate(1024);
-        int buffRead = sc.read(buff);
-        if (buffRead == -1) {
-            System.out.printf("Close");
-            sc.close();
-            return;
-        }
-        while (buffRead > 0) {
-            buff.flip();
-            String receiveText = new String(buff.array(), 0, buffRead);
-            sb.append(receiveText);
-            buff.clear();
-            buffRead = sc.read(buff);
-        }
-
-        String recvJson = sb.toString();
-        System.out.printf("Read data: %s\n", recvJson);
-        this.node.commit(0, recvJson);
-
-        //sc.register(selector, SelectionKey.OP_READ);
-    }
-
-    public static void main(String[] args) {
-        PaxosKVServer server = new PaxosKVServer();
-
-        // Read configure file
-        String confFile = System.getProperty("user.dir") + "/sample_conf/" + "server2.json";
-        Gson gson = new Gson();
-        ServerConf serverConf = gson.fromJson(FileUtils.readFromFile(confFile), ServerConf.class);
-
+        // Init options
         Options options = new Options(1);
         options.setPaxosConf(serverConf.getPaxosConf());
         options.setNodes(serverConf.getNodes());
         options.setMyNodeID(serverConf.getMyNodeID());
 
+        // add sm
         GroupSMInfo groupSMInfo = new GroupSMInfo(0);
         groupSMInfo.addSM(new KVStateMachine());
-
         options.addGroupSMInfo(groupSMInfo);
 
-        // Init Node
-        server.node.runNode(options);
+        // Run Node
+        node.runNode(options);
+    }
 
-        // Init Server, start accept client request
-        try {
-            server.initServe(serverConf.getRequestIP(), serverConf.getRequestPort());
-            server.startServer();
-        } catch (IOException e) {
-            //e.printStackTrace();
-        }
 
+    public static void main(String[] args) {
+        String confFile = System.getProperty("user.dir") + "/sample_conf/" + "server1.json";
+        PaxosKVServer server = new PaxosKVServer(confFile);
+        server.init();
+        server.startServer();
     }
 }

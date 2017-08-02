@@ -1,39 +1,37 @@
 package org.littleneko.sample;
 
+import com.github.luohaha.client.LightCommClient;
+import com.github.luohaha.param.ClientParam;
+
 import java.io.IOException;
-import java.net.InetSocketAddress;
-import java.nio.ByteBuffer;
-import java.nio.channels.SocketChannel;
 
 public class PaxosKVClient {
     public static void main(String[] args) {
-        SocketChannel sc = null;
+        ClientParam param = new ClientParam();
+        param.setOnConnect(conn -> {
+            new Thread(() -> {
+                KVMessage kvMessage1 = new KVMessage(KVMessage.TypeEnum.PUT, "key1", "value1");
+                KVMessage kvMessage2 = new KVMessage(KVMessage.TypeEnum.PUT, "key2", "value2");
+                KVMessage kvMessage3 = new KVMessage(KVMessage.TypeEnum.PUT, "key3", "value3");
+                try {
+                    conn.write(kvMessage1.getJson().getBytes());
+                    conn.write(kvMessage2.getJson().getBytes());
+                    conn.write(kvMessage3.getJson().getBytes());
+                } catch (Exception e) {
+                    // TODO Auto-generated catch block
+                    e.printStackTrace();
+                }
+            }).start();
+        });
+        param.setOnRead((conn, msg) -> System.out.println("Receive " + new String(msg)));
+        param.setOnClose(conn -> System.out.println("Server close!"));
+
+
         try {
-            sc = SocketChannel.open();
-            sc.configureBlocking(true);
-            sc.connect(new InetSocketAddress("127.0.0.1", 1201));
-
-            ByteBuffer buf = ByteBuffer.allocate(1024);
-            KVMessage kvMessage1 = new KVMessage(KVMessage.TypeEnum.PUT, "key1", "value1");
-            buf.put(kvMessage1.getJson().getBytes());
-            buf.flip();
-            sc.write(buf);
-
-            /*
-            buf.clear();
-            KVMessage kvMessage2 = new KVMessage(KVMessage.TypeEnum.PUT, "key2", "value2");
-            buf.put(kvMessage2.getJson().getBytes());
-            buf.flip();
-            sc.write(buf);
-
-            buf.clear();
-            KVMessage kvMessage3 = new KVMessage(KVMessage.TypeEnum.PUT, "key3", "value3");
-            buf.put(kvMessage3.getJson().getBytes());
-            buf.flip();
-            sc.write(buf);
-            */
-
+            LightCommClient client = new LightCommClient(4);
+            client.connect("127.0.0.1", 1201, param);
         } catch (IOException e) {
+            // TODO Auto-generated catch block
             e.printStackTrace();
         }
     }
