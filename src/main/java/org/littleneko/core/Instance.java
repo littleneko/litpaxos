@@ -93,6 +93,7 @@ public class Instance {
             while (true) {
                 String value = committer.GetCommitValue();
                 proposer.newBallot(value);
+                logger.info("New value {}", value);
             }
         }).start();
     }

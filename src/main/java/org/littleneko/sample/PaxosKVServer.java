@@ -34,7 +34,10 @@ public class PaxosKVServer {
         ServerParam param = new ServerParam(serverConf.getRequestIP(), serverConf.getRequestPort());
         param.setBacklog(128);
         param.setOnAccept(conn -> conns.add(conn));
-        param.setOnRead((conn, msg) -> node.commit(0, new String(msg)));
+        param.setOnRead((conn, msg) -> {
+            node.commit(0, new String(msg));
+            System.out.println("Recv: " + new String(msg));
+        });
         param.setOnClose(conn -> conns.remove(conn));
         param.setOnReadError((conn, err) -> System.out.println(err.getMessage()));
         param.setOnWriteError((conn, err) -> System.out.println(err.getMessage()));
