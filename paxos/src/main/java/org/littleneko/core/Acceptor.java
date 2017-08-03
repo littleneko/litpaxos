@@ -8,6 +8,9 @@ import org.littleneko.node.NodeInfo;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.HashMap;
+import java.util.Map;
+
 /**
  * Acceptor
  * Created by little on 2017-06-14.
@@ -16,7 +19,7 @@ public class Acceptor extends Base {
     /**
      * 保存当前acceptor的信息
      */
-    private class AccepterInfo {
+    private class AccepterState {
         // 承诺不再接受编号小于promiseBallotNumber的投票, pb
         private BallotNumber promiseBallotNumber;
 
@@ -26,10 +29,13 @@ public class Acceptor extends Base {
         // 最大投票编号对应的Dec, av
         private String acceptedBallotValue;
 
-        public AccepterInfo() {
-            promiseBallotNumber = new BallotNumber(0, 0);
-            acceptedBallotNumber = new BallotNumber(0, 0);
-            acceptedBallotValue = null;
+        private int instanceID;
+
+        public AccepterState(int instanceID) {
+            this.promiseBallotNumber = new BallotNumber(0, 0);
+            this.acceptedBallotNumber = new BallotNumber(0, 0);
+            this.acceptedBallotValue = null;
+            this.instanceID = instanceID;
         }
 
         /**
@@ -37,7 +43,7 @@ public class Acceptor extends Base {
          */
         public void persist() {
             AcceptorStateData acceptorStateData = new AcceptorStateData();
-            acceptorStateData.setInstanceID(getInstance().getInstanceId());
+            acceptorStateData.setInstanceID(instanceID);
             acceptorStateData.setPromiseID(promiseBallotNumber.getProposalID());
             acceptorStateData.setPromiseNodeID(promiseBallotNumber.getProposalNodeID());
             acceptorStateData.setAcceptedID(acceptedBallotNumber.getProposalID());
@@ -79,18 +85,26 @@ public class Acceptor extends Base {
         public void setAcceptedBallotValue(String acceptedBallotValue) {
             this.acceptedBallotValue = acceptedBallotValue;
         }
+
+        public int getInstanceID() {
+            return instanceID;
+        }
     }
 
     protected static final Logger logger = LoggerFactory.getLogger(Acceptor.class);
 
-    private AccepterInfo accepterInfo;
+    // Instance ID -> AccepterState
+    private Map<Integer, AccepterState> accepterStateMap;
+
+    private int lastSuccessInstanceID;
 
     private PaxosLog paxosLog;
 
-    public Acceptor(MsgTransport msgTransport, Instance instance, NodeInfo curNodeInfo, PaxosLog paxosLog) {
-        super(msgTransport, instance, curNodeInfo);
-        this.accepterInfo = new AccepterInfo();
+    public Acceptor(MsgTransport msgTransport, InstanceManager InstanceManager, NodeInfo curNodeInfo, PaxosLog paxosLog) {
+        super(msgTransport, InstanceManager, curNodeInfo);
+        this.accepterStateMap = new HashMap<>();
         this.paxosLog = paxosLog;
+        this.lastSuccessInstanceID = -1;
     }
 
     /**
@@ -99,34 +113,43 @@ public class Acceptor extends Base {
      * @param paxosMsg paxosMsg
      */
     public void onPrepare(PrepareMsg paxosMsg) {
+        if (!accepterStateMap.containsKey(paxosMsg.getInstanceID())) {
+            accepterStateMap.put(paxosMsg.getInstanceID(), new AccepterState(paxosMsg.getInstanceID()));
+        }
+
+        AccepterState accepterState = accepterStateMap.get(paxosMsg.getInstanceID());
+
         PrepareReplayMsg prepareReplayMsg = new PrepareReplayMsg();
         prepareReplayMsg.setMsgType(PaxosMsgTypeEnum.PAXOS_PREPARE_REPLAY);
-        prepareReplayMsg.setInstanceID(getInstance().getInstanceId());
+        prepareReplayMsg.setInstanceID(accepterState.getInstanceID());
         prepareReplayMsg.setNodeID(getCurNodeInfo().getNodeID());
         prepareReplayMsg.setProposalID(paxosMsg.getProposalID());
 
         BallotNumber ballotNumber = new BallotNumber(paxosMsg.getProposalID(), paxosMsg.getNodeID());
 
         // b >= pb，新提案编号 >= 当前已接受的提案编号，接受此提案
-        if (ballotNumber.compareTo(accepterInfo.getPromiseBallotNumber()) >= 0) {
-            logger.info("Recv prepare msg, b >= pb, promise. b = {}, pb = {}, ab = {}, av = {}", paxosMsg.getProposalID(), accepterInfo.getPromiseBallotNumber(),
-                    accepterInfo.getAcceptedBallotNumber().getProposalID(), accepterInfo.getAcceptedBallotValue());
+        if (ballotNumber.compareTo(accepterState.getPromiseBallotNumber()) >= 0) {
+            logger.info("Recv prepare msg, b >= pb, promise. b = {}, pb = {}, ab = {}, av = {}", paxosMsg.getProposalID(), accepterState.getPromiseBallotNumber(),
+                    accepterState.getAcceptedBallotNumber().getProposalID(), accepterState.getAcceptedBallotValue());
             prepareReplayMsg.setOk(true);
             // set ab, av
-            prepareReplayMsg.setMaxAcceptProposalID(accepterInfo.getAcceptedBallotNumber().getProposalID());
-            prepareReplayMsg.setMaxAcceptProposalNodeID(accepterInfo.getAcceptedBallotNumber().getProposalNodeID());
-            if (accepterInfo.getAcceptedBallotNumber().getProposalID() > 0) {
-                prepareReplayMsg.setMaxAcceptProposalValue(accepterInfo.getAcceptedBallotValue());
+            prepareReplayMsg.setMaxAcceptProposalID(accepterState.getAcceptedBallotNumber().getProposalID());
+            prepareReplayMsg.setMaxAcceptProposalNodeID(accepterState.getAcceptedBallotNumber().getProposalNodeID());
+            if (accepterState.getAcceptedBallotNumber().getProposalID() > 0) {
+                prepareReplayMsg.setMaxAcceptProposalValue(accepterState.getAcceptedBallotValue());
             }
 
             // pb = b
-            accepterInfo.setPromiseBallotNumber(ballotNumber);
+            accepterState.setPromiseBallotNumber(ballotNumber);
 
-            accepterInfo.persist();
+            accepterState.persist();
+
+            //
+            lastSuccessInstanceID = paxosMsg.getInstanceID();
         } else {
-            logger.info("Recv prepare msg, b < pb, reject. rejected by proposal ID: {}", accepterInfo.getPromiseBallotNumber().getProposalID());
+            logger.info("Recv prepare msg, b < pb, reject. rejected by proposal ID: {}", accepterState.getPromiseBallotNumber().getProposalID());
             prepareReplayMsg.setOk(false);
-            prepareReplayMsg.setRejectByProposalID(accepterInfo.getPromiseBallotNumber().getProposalID());
+            prepareReplayMsg.setRejectByProposalID(accepterState.getPromiseBallotNumber().getProposalID());
         }
 
         sendMsg(paxosMsg.getNodeID(), prepareReplayMsg.getMsgJson(), PaxosMsgTypeEnum.PAXOS_PREPARE_REPLAY);
@@ -140,29 +163,34 @@ public class Acceptor extends Base {
     public void onAccept(AcceptMsg paxosMsg) {
         AcceptReplayMsg acceptReplayMsg = new AcceptReplayMsg();
         acceptReplayMsg.setMsgType(PaxosMsgTypeEnum.PAXOS_ACCEPT_REPLAY);
-        acceptReplayMsg.setInstanceID(getInstance().getInstanceId());
+        acceptReplayMsg.setInstanceID(paxosMsg.getInstanceID());
         acceptReplayMsg.setNodeID(getCurNodeInfo().getNodeID());
         acceptReplayMsg.setProposalID(paxosMsg.getProposalID());
 
         BallotNumber ballotNumber = new BallotNumber(paxosMsg.getProposalID(), paxosMsg.getNodeID());
 
+        if (!accepterStateMap.containsKey(paxosMsg.getInstanceID())) {
+            accepterStateMap.put(paxosMsg.getInstanceID(), new AccepterState(paxosMsg.getInstanceID()));
+        }
+        AccepterState accepterState = accepterStateMap.get(paxosMsg.getInstanceID());
+
         // b >= pb
-        if (ballotNumber.compareTo(accepterInfo.getPromiseBallotNumber()) >= 0) {
-            logger.info("Recv accept msg, b >= pb, accept. b = {}, pb = {}", paxosMsg.getProposalID(), accepterInfo.getPromiseBallotNumber().getProposalID());
+        if (ballotNumber.compareTo(accepterState.getPromiseBallotNumber()) >= 0) {
+            logger.info("Recv accept msg, b >= pb, accept. b = {}, pb = {}", paxosMsg.getProposalID(), accepterState.getPromiseBallotNumber().getProposalID());
             acceptReplayMsg.setOk(true);
             // pb = b, ab = b, av = v
-            accepterInfo.setPromiseBallotNumber(ballotNumber);
-            accepterInfo.setAcceptedBallotNumber(ballotNumber);
-            accepterInfo.setAcceptedBallotValue(paxosMsg.getProposalDec());
+            accepterState.setPromiseBallotNumber(ballotNumber);
+            accepterState.setAcceptedBallotNumber(ballotNumber);
+            accepterState.setAcceptedBallotValue(paxosMsg.getProposalDec());
 
-            accepterInfo.persist();
+            accepterState.persist();
 
             //发送当前accepter的消息给所有learner
-            sendChosenValue();
+            sendChosenValue(accepterState);
         } else {
-            logger.info("Recv accept msg, b < pb, reject. rejected by proposal ID: {}", accepterInfo.getPromiseBallotNumber().getProposalID());
+            logger.info("Recv accept msg, b < pb, reject. rejected by proposal ID: {}", accepterState.getPromiseBallotNumber().getProposalID());
             acceptReplayMsg.setOk(false);
-            acceptReplayMsg.setRejectByProposalID(accepterInfo.getPromiseBallotNumber().getProposalID());
+            acceptReplayMsg.setRejectByProposalID(accepterState.getPromiseBallotNumber().getProposalID());
         }
 
         sendMsg(paxosMsg.getNodeID(), acceptReplayMsg.getMsgJson(), PaxosMsgTypeEnum.PAXOS_ACCEPT_REPLAY);
@@ -171,20 +199,20 @@ public class Acceptor extends Base {
     /**
      * 开始新一轮投票
      */
-    public void newRound() {
-        accepterInfo.reset();
-    }
+    /*public void newRound() {
+        accepterState.reset();
+    }*/
 
     /**
      * 发送chosen value，在accepter接受一个提案后发送
      */
-    private void sendChosenValue() {
+    private void sendChosenValue(AccepterState accepterState) {
         ChosenValueMsg chosenValueMsg = new ChosenValueMsg();
         chosenValueMsg.setMsgType(PaxosMsgTypeEnum.PAXOS_CHOSEN_VALUE);
-        chosenValueMsg.setInstanceID(getInstance().getInstanceId());
+        chosenValueMsg.setInstanceID(accepterState.getInstanceID());
         chosenValueMsg.setNodeID(getCurNodeInfo().getNodeID());
-        chosenValueMsg.setAcceptedProposalID(accepterInfo.getAcceptedBallotNumber().getProposalID());
-        chosenValueMsg.setValue(accepterInfo.getAcceptedBallotValue());
+        chosenValueMsg.setAcceptedProposalID(accepterState.getAcceptedBallotNumber().getProposalID());
+        chosenValueMsg.setValue(accepterState.getAcceptedBallotValue());
 
         broadcastMessage(chosenValueMsg.getMsgJson(), PaxosMsgTypeEnum.PAXOS_CHOSEN_VALUE);
     }

@@ -9,6 +9,8 @@ import org.littleneko.node.Node;
 import org.littleneko.node.Options;
 
 import java.io.IOException;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.HashSet;
 import java.util.Set;
 
@@ -75,7 +77,7 @@ public class PaxosKVServer {
 
 
     public static void main(String[] args) {
-        String confFile = "conf/server1.json";
+        String confFile = Paths.get(System.getProperty("user.dir"),"/example/conf/server3.json").toString();
         PaxosKVServer server = new PaxosKVServer(confFile);
         server.init();
         server.startServer();

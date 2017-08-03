@@ -65,17 +65,17 @@ public class Learner extends Base {
     private int allNodeCount;
 
     // 临时保存收到的values
-    private Map<String, Integer> acceptedValues;
+    private Map<Integer, Map<String, Integer>> acceptedValues;
 
     private int learnInterval;
 
     private PaxosTimer timer;
 
-    public Learner(MsgTransport msgTransport, Instance instance, NodeInfo curNodeInfo,
+    public Learner(MsgTransport msgTransport, InstanceManager InstanceManager, NodeInfo curNodeInfo,
                    int allNodeCount,
                    int learnInterval,
                    PaxosTimer timer) {
-        super(msgTransport, instance, curNodeInfo);
+        super(msgTransport, InstanceManager, curNodeInfo);
         this.acceptedValues = new HashMap<>();
         this.allNodeCount = allNodeCount;
         this.learnInterval = learnInterval;
@@ -87,7 +87,7 @@ public class Learner extends Base {
      * 开始发送learner request线程
      */
     public void startLearner() {
-        timer.addSchedule(Instance.LEARNER_TIMER_ID, (id) -> requestLearn(), learnInterval, TimeUnit.MINUTES);
+        timer.addSchedule(InstanceManager.LEARNER_TIMER_ID, (id) -> requestLearn(), learnInterval, TimeUnit.MINUTES);
     }
 
 
@@ -99,8 +99,8 @@ public class Learner extends Base {
         LearnRequestMsg learnRequestMsg = new LearnRequestMsg();
         learnRequestMsg.setMsgType(PaxosMsgTypeEnum.PAXOS_LEARN_REQUEST);
         learnRequestMsg.setNodeID(getCurNodeInfo().getNodeID());
-        learnRequestMsg.setInstanceID(getInstance().getInstanceId());
-        learnRequestMsg.setCurInstanceID(getInstance().getInstanceId());
+        learnRequestMsg.setInstanceID(getInstanceManager().getInstanceID().get());
+        learnRequestMsg.setCurInstanceID(getInstanceManager().getInstanceID().get());
 
         logger.info("Send learn request: {}", learnRequestMsg);
         broadcastMessage(learnRequestMsg.getMsgJson(), PaxosMsgTypeEnum.PAXOS_LEARN_REQUEST);
@@ -114,19 +114,19 @@ public class Learner extends Base {
     public void onRequestLearn(LearnRequestMsg learnRequestMsg) {
         logger.info("Recv learn request msg: {}", learnRequestMsg);
         // 当前instance ID更小
-        if (learnRequestMsg.getCurInstanceID() > getInstance().getInstanceId()) {
+        if (learnRequestMsg.getCurInstanceID() > getInstanceManager().getInstanceID().get()) {
             return;
         }
 
         LearnResponseMsg learnResponseMsg = new LearnResponseMsg();
         learnResponseMsg.setMsgType(PaxosMsgTypeEnum.PAXOS_LEARN_RESPONSE);
         learnResponseMsg.setNodeID(getCurNodeInfo().getNodeID());
-        learnResponseMsg.setInstanceID(getInstance().getInstanceId());
+        learnResponseMsg.setInstanceID(getInstanceManager().getInstanceID().get());
         learnResponseMsg.setStartInstanceID(learnRequestMsg.getCurInstanceID());
 
-        for (int i = learnRequestMsg.getCurInstanceID(); i < getInstance().getInstanceId(); i++) {
-            if (getInstance().getInstanceValues().containsKey(i)) {
-                learnResponseMsg.addInstanceState(i, getInstance().getInstanceValues().get(i));
+        for (int i = learnRequestMsg.getCurInstanceID(); i < getInstanceManager().getInstanceID().get(); i++) {
+            if (getInstanceManager().getInstanceValues().containsKey(i)) {
+                learnResponseMsg.addInstanceState(i, getInstanceManager().getInstanceValues().get(i));
             }
         }
 
@@ -142,16 +142,16 @@ public class Learner extends Base {
     public void onLearnResponse(LearnResponseMsg learnResponseMsg) {
         logger.info("Recv learn response: {}", learnResponseMsg);
         // 发送response消息的节点的instance ID比当前结点的instance小或者相等，说明当前节点实例已经对齐
-        if (learnResponseMsg.getInstanceID() <= getInstance().getInstanceId()) {
+        if (learnResponseMsg.getInstanceID() <= getInstanceManager().getInstanceID().get()) {
             return;
         }
 
         learnResponseMsg.getValues().forEach((k, v) -> {
-            if (k >= getInstance().getInstanceId()) {
-                getInstance().saveValue(v);
-                getInstance().getStateMachines().forEach((smv) -> smv.execute(v));
+            if (k >= getInstanceManager().getInstanceID().get()) {
+                getInstanceManager().saveValue(v);
+                getInstanceManager().getStateMachines().forEach((smv) -> smv.execute(v));
                 // 学习instance并提高当前instance ID
-                getInstance().newInstance();
+                getInstanceManager().newInstance();
             }
         });
     }
@@ -163,32 +163,35 @@ public class Learner extends Base {
      */
     public void onRecvChosenValue(ChosenValueMsg chosenValueMsg) {
         logger.info("Recv chosen value: {}", chosenValueMsg);
-        if (chosenValueMsg.getInstanceID() == getInstance().getInstanceId()) {
-            if (acceptedValues.containsKey(chosenValueMsg.getValue())) {
-                acceptedValues.put(chosenValueMsg.getValue(), acceptedValues.get(chosenValueMsg.getValue()) + 1);
-            } else {
-                acceptedValues.put(chosenValueMsg.getValue(), 1);
-            }
+        if (!acceptedValues.containsKey(chosenValueMsg.getInstanceID())) {
+            acceptedValues.put(chosenValueMsg.getInstanceID(), new HashMap<>());
+        }
+        Map<String, Integer> values = acceptedValues.get(chosenValueMsg.getInstanceID());
+        if (values.containsKey(chosenValueMsg.getValue())) {
+            values.put(chosenValueMsg.getValue(), values.get(chosenValueMsg.getValue()) + 1);
+        } else {
+            values.put(chosenValueMsg.getValue(), 1);
+        }
 
-            List<String> delKey = new ArrayList<>();
-            acceptedValues.forEach((k, v) -> {
-                // 被超过一半的acceptor接受
-                if (v > allNodeCount / 2 + 1) {
-                    logger.info("Proposal {} has been accepted by qrm acceptor", k);
-                    // instance 保存该值并持久化
-                    getInstance().saveValue(k);
-                    // 执行sm
-                    getInstance().getStateMachines().forEach((smv) -> smv.execute(k));
-                    // 更新当前instance + 1
-                    getInstance().newInstance();
+        List<Integer> delKey = new ArrayList<>();
+        acceptedValues.forEach((k, v) ->
+                v.forEach((k1, v1) -> {
+                    // 被超过一半的acceptor接受
+                    if (v1 > allNodeCount / 2 + 1) {
+                        logger.info("Proposal {} has been accepted by qrm acceptor", k1);
+                        // instance 保存该值并持久化
+                        getInstanceManager().saveValue(k1);
+                        // 执行sm
+                        getInstanceManager().getStateMachines().forEach((smv) -> smv.execute(k1));
+                        // 更新当前instance + 1
+                        getInstanceManager().newInstance();
 
-                    delKey.add(k);
-                }
-            });
+                        delKey.add(k);
+                    }
+                }));
 
-            for (String key: delKey) {
-                acceptedValues.remove(key);
-            }
+        for (int key : delKey) {
+            acceptedValues.remove(key);
         }
     }
 }

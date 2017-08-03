@@ -16,13 +16,14 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * Instance
+ * InstanceManager
  * Created by little on 2017-06-14.
  */
-public class Instance {
-    protected static final Logger logger = LoggerFactory.getLogger(Instance.class);
+public class InstanceManager {
+    protected static final Logger logger = LoggerFactory.getLogger(InstanceManager.class);
 
     public static final int PREPARE_TIMER_ID = 0;
     public static final int ACCEPT_TIMER_ID = 1;
@@ -32,7 +33,7 @@ public class Instance {
     private Acceptor acceptor;
     private Learner learner;
 
-    private volatile int instanceId;
+    private AtomicInteger instanceID;
 
     // 一个instance可以有多个SM
     private List<StateMachine> stateMachines;
@@ -48,7 +49,7 @@ public class Instance {
 
     private PaxosLog paxosLog;
 
-    public Instance(MsgTransport msgTransport, NodeInfo nodeInfo, Committer committer, GroupSMInfo groupSMInfo, int allNodeCount, int groupID) {
+    public InstanceManager(MsgTransport msgTransport, NodeInfo nodeInfo, Committer committer, GroupSMInfo groupSMInfo, int allNodeCount, int groupID) {
         this.paxosLog = new PaxosLog(groupID);
         PaxosTimer timer = new PaxosTimer();
         this.proposer = new Proposer(msgTransport, nodeInfo, this, timer, allNodeCount);
@@ -57,7 +58,7 @@ public class Instance {
 
         this.committer = committer;
 
-        this.instanceId = 0;
+        this.instanceID = new AtomicInteger(0);
         this.stateMachines = groupSMInfo.getSmList();
         this.instanceValues = new HashMap<>();
 
@@ -102,10 +103,10 @@ public class Instance {
      * 开始新的instance
      */
     public void newInstance() {
-        proposer.newRound();
-        acceptor.newRound();
-        instanceId++;
-        logger.info("New instance ID: {}", instanceId);
+        //proposer.newRound();
+        //acceptor.newRound();
+        //instanceID++;
+        logger.info("New instance ID: {}", instanceID);
     }
 
     /**
@@ -114,8 +115,8 @@ public class Instance {
      * @param value
      */
     public void saveValue(String value) {
-        logger.info("Persist instance: {}, value: {}", instanceId, value);
-        instanceValues.put(instanceId, value);
+        logger.info("Persist instance: {}, value: {}", instanceID, value);
+        //instanceValues.put(instanceID, value);
         persist();
     }
 
@@ -134,8 +135,8 @@ public class Instance {
      */
     private void persist() {
         InstanceState instanceState = new InstanceState();
-        instanceState.setInstanceID(instanceId);
-        instanceState.setValue(instanceValues.get(instanceId));
+        //instanceState.setInstanceID(instanceID);
+        instanceState.setValue(instanceValues.get(instanceID));
         paxosLog.appendInstanceState(instanceState);
     }
 
@@ -144,14 +145,10 @@ public class Instance {
      */
     private void recvMsgForProposer(BasePaxosMsg paxosMsg) {
         logger.info("Recv msg for proposal: {}", paxosMsg);
-        if (paxosMsg.getInstanceID() == instanceId) {
-            if (paxosMsg.getMsgType() == PaxosMsgTypeEnum.PAXOS_PREPARE_REPLAY) {
-                proposer.onPrepareReply((PrepareReplayMsg) paxosMsg);
-            } else if (paxosMsg.getMsgType() == PaxosMsgTypeEnum.PAXOS_ACCEPT_REPLAY) {
-                proposer.onAcceptReply((AcceptReplayMsg) paxosMsg);
-            }
-        } else {
-            logger.warn("Not same instance, recv instance: {}, myinstance: {}", paxosMsg.getInstanceID(), instanceId);
+        if (paxosMsg.getMsgType() == PaxosMsgTypeEnum.PAXOS_PREPARE_REPLAY) {
+            proposer.onPrepareReply((PrepareReplayMsg) paxosMsg);
+        } else if (paxosMsg.getMsgType() == PaxosMsgTypeEnum.PAXOS_ACCEPT_REPLAY) {
+            proposer.onAcceptReply((AcceptReplayMsg) paxosMsg);
         }
     }
 
@@ -160,14 +157,10 @@ public class Instance {
      */
     private void recvMsgForAcceptor(BasePaxosMsg paxosMsg) {
         logger.info("Recv msg for acceptor: {}", paxosMsg);
-        if (paxosMsg.getInstanceID() == instanceId) {
-            if (paxosMsg.getMsgType() == PaxosMsgTypeEnum.PAXOS_PREPARE) {
-                acceptor.onPrepare((PrepareMsg) paxosMsg);
-            } else if (paxosMsg.getMsgType() == PaxosMsgTypeEnum.PAXOS_ACCEPT) {
-                acceptor.onAccept((AcceptMsg) paxosMsg);
-            }
-        } else {
-            logger.warn("Not same instance, recv instance: {}, myinstance: {}", paxosMsg.getInstanceID(), instanceId);
+        if (paxosMsg.getMsgType() == PaxosMsgTypeEnum.PAXOS_PREPARE) {
+            acceptor.onPrepare((PrepareMsg) paxosMsg);
+        } else if (paxosMsg.getMsgType() == PaxosMsgTypeEnum.PAXOS_ACCEPT) {
+            acceptor.onAccept((AcceptMsg) paxosMsg);
         }
     }
 
@@ -185,8 +178,8 @@ public class Instance {
         }
     }
 
-    public int getInstanceId() {
-        return instanceId;
+    public AtomicInteger getInstanceID() {
+        return instanceID;
     }
 
     public Map<Integer, String> getInstanceValues() {

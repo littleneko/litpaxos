@@ -7,6 +7,8 @@ import org.littleneko.utils.PaxosTimer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -14,7 +16,7 @@ import java.util.concurrent.TimeUnit;
  * Created by little on 2017-06-14.
  */
 public class Proposer extends Base {
-    private enum ProposerState {
+    private enum ProposerStatusEnum {
         // 初始状态
         INITIAL,
         // 进入prepare流程
@@ -24,9 +26,9 @@ public class Proposer extends Base {
     }
 
     /**
-     * 保存当前Proposer的信息
+     * 保存当前instance Proposer的信息
      */
-    private class ProposerInfo {
+    private class ProposerState {
         // b, 当前提议的编号
         private int curProposalID;
 
@@ -39,11 +41,28 @@ public class Proposer extends Base {
         // 其他节点最大提议编号，被reject时收到
         private int highestOtherProposalID;
 
-        public ProposerInfo(int initBal) {
+        // 表示当前proposer处在哪个阶段
+        private ProposerStatusEnum proposerStatusEnum;
+
+        // 保存收到的信息
+        private MsgCounter msgCounter;
+
+        private int instanceID;
+
+        /**
+         *
+         * @param initBal
+         * @param proposalValue
+         * @param allNodeCount
+         */
+        public ProposerState(int initBal, String proposalValue, int instanceID, int allNodeCount) {
             this.curProposalID = initBal;
             this.highestOtherPreAcceptBallot = new BallotNumber(0, 0);
-            proposalValue = null;
-            highestOtherProposalID = 0;
+            this.proposalValue = proposalValue;
+            this.highestOtherProposalID = 0;
+            this.proposerStatusEnum = ProposerStatusEnum.INITIAL;
+            this.msgCounter = new MsgCounter(allNodeCount);
+            this.instanceID = instanceID;
         }
 
         /**
@@ -84,7 +103,7 @@ public class Proposer extends Base {
          * 重置相关的值
          */
         public void reset() {
-            highestOtherPreAcceptBallot = new BallotNumber(0, 0);
+            highestOtherPreAcceptBallot.reset();
             proposalValue = null;
             highestOtherProposalID = 0;
         }
@@ -97,32 +116,30 @@ public class Proposer extends Base {
             return proposalValue;
         }
 
-        public void setProposalValue(String proposalValue) {
-            this.proposalValue = proposalValue;
+        public MsgCounter getMsgCounter() {
+            return msgCounter;
         }
 
-        public int getHighestOtherProposalID() {
-            return highestOtherProposalID;
+        public ProposerStatusEnum getProposerStatusEnum() {
+            return proposerStatusEnum;
         }
 
-        public BallotNumber getHighestOtherPreAcceptBallot() {
-            return highestOtherPreAcceptBallot;
+        public void setProposerStatusEnum(ProposerStatusEnum proposerStatusEnum) {
+            this.proposerStatusEnum = proposerStatusEnum;
+        }
+
+        public int getInstanceID() {
+            return instanceID;
         }
     }
 
-    protected static final Logger logger = LoggerFactory.getLogger(Proposer.class);
+    private static final Logger logger = LoggerFactory.getLogger(Proposer.class);
 
     private static final int PREPARE_TIMEOUT = 5;
     private static final int ACCEPT_TIMEOUT = 5;
 
-    // 表示当前proposer处在哪个阶段
-    private ProposerState proposerState;
-
-    // 保存收到的信息
-    private MsgCounter msgCounter;
-
-    // 保存当前proposer的相关信息
-    private ProposerInfo proposerInfo;
+    // Instance ID -> ProposerState
+    private Map<Integer, ProposerState> proposerStateMap;
 
     private PaxosTimer timer;
 
@@ -132,31 +149,32 @@ public class Proposer extends Base {
     // 记录当前轮投票中是否被acceptor拒绝过
     private boolean wasRejectedBySomeOne;
 
-    public Proposer(MsgTransport msgTransport, NodeInfo curNodeInfo, Instance instance, PaxosTimer timer, int allNodeCount) {
-        super(msgTransport, instance, curNodeInfo);
-        this.proposerState = ProposerState.INITIAL;
-        this.msgCounter = new MsgCounter(allNodeCount);
-        this.proposerInfo = new ProposerInfo(0);
+    private int allNodeCount;
+
+    public Proposer(MsgTransport msgTransport, NodeInfo curNodeInfo, InstanceManager InstanceManager, PaxosTimer timer, int allNodeCount) {
+        super(msgTransport, InstanceManager, curNodeInfo);
         this.timer = timer;
         this.canSkipPrepare = false;
         this.wasRejectedBySomeOne = false;
+        this.proposerStateMap = new HashMap<>();
+        this.allNodeCount = allNodeCount;
     }
 
     /**
-     * 开始新一轮的投票
-     *
      * @param value 提议的值
      */
     public void newBallot(String value) {
         wasRejectedBySomeOne = false;
-        proposerInfo.setProposalValue(value);
+        int curInstanceID = getInstanceManager().getInstanceID().addAndGet(1);
+        ProposerState proposerState = new ProposerState(0, value, curInstanceID, allNodeCount);
+        proposerStateMap.put(curInstanceID, proposerState);
 
         if (canSkipPrepare && !wasRejectedBySomeOne) {
-            logger.info("Skip prepare");
-            accept();
+            logger.info("Instance {} skip prepare", curInstanceID);
+            accept(proposerState);
         } else {
-            logger.info("Start prepare");
-            prepare(wasRejectedBySomeOne);
+            logger.info("Instance {} start prepare", curInstanceID);
+            prepare(wasRejectedBySomeOne, proposerState);
         }
     }
 
@@ -167,28 +185,28 @@ public class Proposer extends Base {
      *                   isRejected == true：prepare被拒绝，需要提高自己的proposal编号<br>
      *                   isRejected == false：prepare超时或者开始新一轮的投票，使用当前编号继续提交<br>
      */
-    private void prepare(boolean isRejected) {
+    private void prepare(boolean isRejected, ProposerState proposerState) {
         exitAccept();
-        proposerState = ProposerState.PREPARING;
+        proposerState.setProposerStatusEnum(ProposerStatusEnum.PREPARING);
         canSkipPrepare = false;
         wasRejectedBySomeOne = false;
 
         // 更新proposal编号
         if (isRejected) {
-            proposerInfo.newPrepare();
+            proposerState.newPrepare();
         }
 
         PrepareMsg prepareMsg = new PrepareMsg();
         prepareMsg.setMsgType(PaxosMsgTypeEnum.PAXOS_PREPARE);
-        prepareMsg.setInstanceID(getInstance().getInstanceId());
+        prepareMsg.setInstanceID(proposerState.instanceID);
         prepareMsg.setNodeID(getCurNodeInfo().getNodeID());
-        prepareMsg.setProposalID(proposerInfo.getCurProposalID());
+        prepareMsg.setProposalID(proposerState.getCurProposalID());
 
         // 清空msgCounter
-        msgCounter.startNewRound();
+        proposerState.getMsgCounter().startNewRound();
 
         //添加prepare超时定时器
-        timer.addTimer(Instance.PREPARE_TIMER_ID, (id) -> prepare(wasRejectedBySomeOne), PREPARE_TIMEOUT, TimeUnit.SECONDS);
+        timer.addTimer(InstanceManager.PREPARE_TIMER_ID, (id) -> prepare(wasRejectedBySomeOne, proposerState), PREPARE_TIMEOUT, TimeUnit.SECONDS);
 
         logger.info("Send prepare msg, instance: {}, nodeID: {}, proposalID: {}", prepareMsg.getInstanceID(), prepareMsg.getNodeID(), prepareMsg.getProposalID());
         // 发送prepare到其他所有节点
@@ -201,72 +219,80 @@ public class Proposer extends Base {
      * @param paxosMsg 收到的回复消息
      */
     public void onPrepareReply(PrepareReplayMsg paxosMsg) {
+        if (!proposerStateMap.containsKey(paxosMsg.getInstanceID())) {
+            logger.warn("Recv prepare reply msg, but invalid instance ID {}", paxosMsg.getInstanceID());
+            return;
+        }
+
+        ProposerState proposerState =  proposerStateMap.get(paxosMsg.getInstanceID());
         // 当前以不在Prepare阶段，不处理
         // 1. 某个节点响应过慢，提案已进入到Accept阶段
         // 2. 整个提案响应过慢，提案已终止
-        if (proposerState != ProposerState.PREPARING) {
-            logger.info("Cur proposer is not in PREPARING State");
+        if (proposerState.getProposerStatusEnum() != ProposerStatusEnum.PREPARING) {
+            logger.info("Cur proposer {} is not in PREPARING State", proposerState.getInstanceID());
             return;
         }
 
         // 不是当前提议编号，不处理
-        if (paxosMsg.getProposalID() != proposerInfo.getCurProposalID()) {
-            logger.info("Cur proposer ID: {} != Recv proposal ID: {}", proposerInfo.getCurProposalID(), paxosMsg.getProposalID());
+        if (paxosMsg.getProposalID() != proposerState.getCurProposalID()) {
+            logger.info("Cur proposer ID: {} != Reply proposal ID: {}", proposerState.getCurProposalID(), paxosMsg.getProposalID());
             return;
         }
 
-        msgCounter.addReceive(paxosMsg.getNodeID());
+        proposerState.getMsgCounter().addReceive(paxosMsg.getNodeID());
 
         if (paxosMsg.isOk()) {
-            logger.info("Prepare ok, prepare ID: {}, max accept ID: {}", paxosMsg.getProposalID(), paxosMsg.getMaxAcceptProposalID());
-            msgCounter.addPromiseOrAccept(paxosMsg.getNodeID());
+            logger.info("Prepare ok, instance ID: {}, prepare ID: {}, max accept ID: {}",
+                    proposerState.getInstanceID(), paxosMsg.getProposalID(), paxosMsg.getMaxAcceptProposalID());
+            proposerState.getMsgCounter().addPromiseOrAccept(paxosMsg.getNodeID());
             BallotNumber ballotNumber = new BallotNumber(paxosMsg.getMaxAcceptProposalID(), paxosMsg.getMaxAcceptProposalNodeID());
-            if (paxosMsg.getMaxAcceptProposalID() > proposerInfo.getCurProposalID()) {
+            if (paxosMsg.getMaxAcceptProposalID() > proposerState.getCurProposalID()) {
                 if (paxosMsg.getMaxAcceptProposalValue() != null) {
                     // 记录ab, av
                     logger.info("update max accepted value: {}", paxosMsg.getMaxAcceptProposalValue());
-                    proposerInfo.updatePreAcceptValue(ballotNumber, paxosMsg.getMaxAcceptProposalValue());
+                    proposerState.updatePreAcceptValue(ballotNumber, paxosMsg.getMaxAcceptProposalValue());
                 }
             }
         } else {
             logger.info("Prepare reject by proposal ID: {}", paxosMsg.getRejectByProposalID());
-            msgCounter.addReject(paxosMsg.getNodeID());
+            proposerState.getMsgCounter().addReject(paxosMsg.getNodeID());
             wasRejectedBySomeOne = true;
             // 记录拒绝提案节点返回的Proposal ID，以便下次基于此信息重新发起提案
-            proposerInfo.updateHighestOtherProposalID(paxosMsg.getRejectByProposalID());
+            proposerState.updateHighestOtherProposalID(paxosMsg.getRejectByProposalID());
         }
 
         // 超过qrm的人数通过，开始accept流程
-        if (msgCounter.isPassedOnThisRound()) {
+        if (proposerState.getMsgCounter().isPassedOnThisRound()) {
             logger.info("Passed on this round");
             // 这里做了一个优化，一旦Prepare阶段的提案被通过后，就自动跳过Prepare阶段，以减少网络传输落盘次数
             canSkipPrepare = true;
-            accept();
-        } else if (msgCounter.isRejectedOnThisRound() || msgCounter.isAllReceiveOnThisRound()) {
+            accept(proposerState);
+        } else if (proposerState.getMsgCounter().isRejectedOnThisRound() ||
+                proposerState.getMsgCounter().isAllReceiveOnThisRound()) {
             logger.info("Reject on this Round, retry after {} s", Proposer.PREPARE_TIMEOUT);
-            timer.addTimer(Instance.PREPARE_TIMER_ID, (id) -> prepare(wasRejectedBySomeOne), Proposer.PREPARE_TIMEOUT, TimeUnit.SECONDS);
+            timer.addTimer(InstanceManager.PREPARE_TIMER_ID, (id) -> prepare(wasRejectedBySomeOne, proposerState), Proposer.PREPARE_TIMEOUT, TimeUnit.SECONDS);
         }
     }
 
     /**
      * 开始accept流程
      */
-    private void accept() {
+    private void accept(ProposerState proposerState) {
         // 改变当前状态并取消prepare超时定时器
         exitPrepare();
-        proposerState = ProposerState.ACCEPTING;
+        proposerState.setProposerStatusEnum(ProposerStatusEnum.ACCEPTING);
 
         AcceptMsg acceptMsg = new AcceptMsg();
         acceptMsg.setMsgType(PaxosMsgTypeEnum.PAXOS_ACCEPT);
-        acceptMsg.setInstanceID(getInstance().getInstanceId());
+        acceptMsg.setInstanceID(proposerState.getInstanceID());
         acceptMsg.setNodeID(getCurNodeInfo().getNodeID());
-        acceptMsg.setProposalID(proposerInfo.getCurProposalID());
-        acceptMsg.setProposalDec(proposerInfo.getProposalValue());
+        acceptMsg.setProposalID(proposerState.getCurProposalID());
+        acceptMsg.setProposalDec(proposerState.getProposalValue());
 
-        msgCounter.startNewRound();
+        proposerState.getMsgCounter().startNewRound();
 
         // 添加accept超时定时器
-        timer.addTimer(Instance.ACCEPT_TIMER_ID, (id) -> accept(), ACCEPT_TIMEOUT, TimeUnit.SECONDS);
+        timer.addTimer(InstanceManager.ACCEPT_TIMER_ID, (id) -> accept(proposerState), ACCEPT_TIMEOUT, TimeUnit.SECONDS);
 
         logger.info("Send accept msg, instance: {}, nodeID: {}, proposalID: {}, proposal value: {}", acceptMsg.getInstanceID(), acceptMsg.getNodeID(), acceptMsg.getProposalID(), acceptMsg.getProposalDec());
         // 广播accept消息
@@ -279,41 +305,47 @@ public class Proposer extends Base {
      * @param paxosMsg
      */
     public void onAcceptReply(AcceptReplayMsg paxosMsg) {
+        if (!proposerStateMap.containsKey(paxosMsg.getInstanceID())) {
+            logger.warn("Recv accept reply msg, but invalid instance ID {}", paxosMsg.getInstanceID());
+            return;
+        }
         // 当前已不在Accept阶段
         // 1. 某个节点响应过慢，提案已完成
         // 2. 多个节点响应过慢，提案已重新进入Prepare阶段
         // 3. 整个提案响应过慢，提案已终止
-        if (proposerState != ProposerState.ACCEPTING) {
+
+        ProposerState proposerState =  proposerStateMap.get(paxosMsg.getInstanceID());
+        if (proposerState.getProposerStatusEnum() != ProposerStatusEnum.ACCEPTING) {
             logger.info("Cur proposer is not in ACCEPTING State");
             return;
         }
 
         // 不是当前提议编号，不处理
-        if (paxosMsg.getProposalID() != proposerInfo.getCurProposalID()) {
-            logger.info("Cur proposer ID: {} != Recv proposal ID: {}", proposerInfo.getCurProposalID(), paxosMsg.getProposalID());
+        if (paxosMsg.getProposalID() != proposerState.getCurProposalID()) {
+            logger.info("Cur proposer ID: {} != Recv proposal ID: {}", proposerState.getCurProposalID(), paxosMsg.getProposalID());
             return;
         }
 
-        msgCounter.addReceive(paxosMsg.getNodeID());
+        proposerState.getMsgCounter().addReceive(paxosMsg.getNodeID());
 
         if (paxosMsg.isOk()) {
             logger.info("Accept ok, accept ID: {}", paxosMsg.getProposalID());
-            msgCounter.addPromiseOrAccept(paxosMsg.getNodeID());
+            proposerState.getMsgCounter().addPromiseOrAccept(paxosMsg.getNodeID());
         } else {
             logger.info("Accept reject, reject by proposal ID: {}", paxosMsg.getRejectByProposalID());
-            msgCounter.addReject(paxosMsg.getNodeID());
+            proposerState.getMsgCounter().addReject(paxosMsg.getNodeID());
             wasRejectedBySomeOne = true;
-            proposerInfo.updateHighestOtherProposalID(paxosMsg.getRejectByProposalID());
+            proposerState.updateHighestOtherProposalID(paxosMsg.getRejectByProposalID());
         }
 
-        if (msgCounter.isPassedOnThisRound()) {
+        if (proposerState.getMsgCounter().isPassedOnThisRound()) {
             // 本轮提议完成
             logger.info("Accept passed on this round");
             exitAccept();
         } else {
             // 重新提交
             logger.info("Accept reject on this round, retry");
-            timer.addTimer(Instance.ACCEPT_TIMER_ID, (id) -> accept(), Proposer.ACCEPT_TIMEOUT, TimeUnit.SECONDS);
+            timer.addTimer(InstanceManager.ACCEPT_TIMER_ID, (id) -> accept(proposerState), Proposer.ACCEPT_TIMEOUT, TimeUnit.SECONDS);
         }
     }
 
@@ -324,22 +356,19 @@ public class Proposer extends Base {
         logger.info("New Round");
         exitPrepare();
         exitAccept();
-        msgCounter.startNewRound();
-        proposerInfo.reset();
-        proposerState = ProposerState.INITIAL;
     }
 
     /**
      * 结束prepare流程
      */
     private void exitPrepare() {
-        timer.cancelTimer(Instance.PREPARE_TIMER_ID);
+        timer.cancelTimer(InstanceManager.PREPARE_TIMER_ID);
     }
 
     /**
      * 结束accept流程
      */
     private void exitAccept() {
-        timer.cancelTimer(Instance.ACCEPT_TIMER_ID);
+        timer.cancelTimer(InstanceManager.ACCEPT_TIMER_ID);
     }
 }

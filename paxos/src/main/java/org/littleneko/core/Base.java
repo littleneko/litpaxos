@@ -12,14 +12,14 @@ public class Base {
     private MsgTransport msgTransport;
 
     // 当前proposer所在的instance
-    private Instance instance;
+    private InstanceManager InstanceManager;
 
     // 当前节点信息
     private NodeInfo curNodeInfo;
 
-    public Base(MsgTransport msgTransport, Instance instance, NodeInfo curNodeInfo) {
+    public Base(MsgTransport msgTransport, InstanceManager InstanceManager, NodeInfo curNodeInfo) {
         this.msgTransport = msgTransport;
-        this.instance = instance;
+        this.InstanceManager = InstanceManager;
         this.curNodeInfo = curNodeInfo;
     }
 
@@ -40,8 +40,8 @@ public class Base {
         this.msgTransport.broadcastMessage(paxosMsg, msgType);
     }
 
-    public Instance getInstance() {
-        return instance;
+    public InstanceManager getInstanceManager() {
+        return InstanceManager;
     }
 
     public NodeInfo getCurNodeInfo() {

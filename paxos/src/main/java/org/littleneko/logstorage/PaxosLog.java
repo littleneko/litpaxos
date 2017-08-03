@@ -1,7 +1,6 @@
 package org.littleneko.logstorage;
 
 import com.google.gson.Gson;
-import org.littleneko.core.Instance;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

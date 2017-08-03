@@ -5,7 +5,6 @@ import org.littleneko.message.BasePaxosMsg;
 import org.littleneko.message.PaxosMsgTypeEnum;
 import org.littleneko.message.PaxosMsgUtil;
 import org.littleneko.message.TransMsg;
-import org.littleneko.sm.StateMachine;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -81,7 +80,7 @@ public class Node {
     private void onReciveMessage(BasePaxosMsg paxosMsg) {
         int groupID = paxosMsg.getGroupID();
         if (groupMap.containsKey(groupID)) {
-            groupMap.get(groupID).getInstance().recvPaxosMsg(paxosMsg);
+            groupMap.get(groupID).getInstanceManager().recvPaxosMsg(paxosMsg);
         } else {
             logger.warn("Mismatch groupID {}", groupID);
         }
