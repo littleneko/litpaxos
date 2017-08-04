@@ -188,9 +188,9 @@ KVClient通过TCP Socket向KVServer发送请求：
 这里我们定义了类`KVMessage`并序列化为Json作为提交的Value类型。
 
 ## 参考资料
-1. [Paxos理论介绍(1): 朴素Paxos算法理论推导与证明](https://mp.weixin.qq.com/s?__biz=MzI4NDMyNTU2Mw==&mid=2247483712&idx=1&sn=5da6e0850acc0c2543b198a627ae5836&scene=21#wechat_redirect)
-2. [Paxos理论介绍(2): Multi-Paxos与Leader](https://mp.weixin.qq.com/s?__biz=MzI4NDMyNTU2Mw==&mid=2247483798&idx=1&sn=42dd222ae255b13f1f67cd9e6d3f3dc0&scene=21#wechat_redirect)
-3. [微信自研生产级paxos类库PhxPaxos实现原理介绍](https://mp.weixin.qq.com/s?__biz=MzI4NDMyNTU2Mw==&mid=2247483695&idx=1&sn=91ea422913fc62579e020e941d1d059e&scene=21#wechat_redirect)
-4. [The Part-Time Parliament - Leslie Lamport](http://lamport.azurewebsites.net/pubs/lamport-paxos.pdf)
-5. [Paxos Made Simple - Leslie Lamport](http://lamport.azurewebsites.net/pubs/paxos-simple.pdf)
-6. [Paxos Made Live – An Engineering Perspective](https://research.google.com/archive/paxos_made_live.html)
+1. [The Part-Time Parliament - Leslie Lamport](http://lamport.azurewebsites.net/pubs/lamport-paxos.pdf)
+2. [Paxos Made Simple - Leslie Lamport](http://lamport.azurewebsites.net/pubs/paxos-simple.pdf)
+3. [Paxos Made Live – An Engineering Perspective](https://research.google.com/archive/paxos_made_live.html)
+4. [Paxos理论介绍(1): 朴素Paxos算法理论推导与证明](https://mp.weixin.qq.com/s?__biz=MzI4NDMyNTU2Mw==&mid=2247483712&idx=1&sn=5da6e0850acc0c2543b198a627ae5836&scene=21#wechat_redirect)
+5. [Paxos理论介绍(2): Multi-Paxos与Leader](https://mp.weixin.qq.com/s?__biz=MzI4NDMyNTU2Mw==&mid=2247483798&idx=1&sn=42dd222ae255b13f1f67cd9e6d3f3dc0&scene=21#wechat_redirect)
+6. [微信自研生产级paxos类库PhxPaxos实现原理介绍](https://mp.weixin.qq.com/s?__biz=MzI4NDMyNTU2Mw==&mid=2247483695&idx=1&sn=91ea422913fc62579e020e941d1d059e&scene=21#wechat_redirect)
